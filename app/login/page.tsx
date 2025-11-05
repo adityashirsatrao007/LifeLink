@@ -101,7 +101,7 @@ export default function LoginPage() {
               {isLoading ? "Logging in..." : "Login"}
             </Button>
             <div className="text-sm text-center text-gray-600">
-              Don't have an account?{" "}
+              Don&apos;t have an account?{" "}
               <Link href="/register/donor" className="text-red-600 hover:underline font-semibold">
                 Register as Donor
               </Link>

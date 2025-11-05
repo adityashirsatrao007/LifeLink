@@ -150,7 +150,7 @@ export default function HospitalDashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Your Blood Requests</CardTitle>
-            <CardDescription>Manage your hospital's blood requests</CardDescription>
+            <CardDescription>Manage your hospital&apos;s blood requests</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
