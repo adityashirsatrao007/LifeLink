@@ -1,0 +1,6 @@
+# Public Assets
+
+This folder contains static assets that are served directly by Next.js.
+
+Files in this directory are available at the root URL. For example:
+- `public/logo.png` → `https://your-domain.com/logo.png`
