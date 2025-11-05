@@ -1,13 +1,3 @@
 {
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "framework": "nextjs",
-  "regions": ["iad1"],
-  "env": {
-    "NEXT_PUBLIC_PARSE_APP_ID": "@parse_app_id",
-    "NEXT_PUBLIC_PARSE_JS_KEY": "@parse_js_key",
-    "NEXT_PUBLIC_PARSE_SERVER_URL": "@parse_server_url",
-    "NEXT_PUBLIC_APP_URL": "@app_url"
-  }
+  "framework": "nextjs"
 }

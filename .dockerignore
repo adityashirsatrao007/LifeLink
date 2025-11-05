@@ -1,0 +1,52 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Next.js
+.next
+out
+build
+
+# Environment files
+.env
+.env.local
+.env*.local
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+.nyc_output
+
+# Misc
+*.log
+*.md
+!README.md
+.prettierrc
+.eslintrc.json
+
+# Documentation
+AUDIT_REPORT.md
+ADMIN_TESTING.md
+COMPLETE.md
+DEPLOYMENT.md
+DEPLOYMENT_SUMMARY.md
+VERCEL_READY.md
+VERCEL_ENV_SETUP.md
+SETUP_SUMMARY.md
+
+# Scripts (not needed in container)
+scripts
