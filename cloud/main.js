@@ -117,23 +117,27 @@ Parse.Cloud.beforeSave("BloodRequest", async (request) => {
           "Hospital must be approved before creating blood requests"
         );
       }
+      
+      // Get user from hospital profile for ACL
+      const user = hospital.get("user");
+      if (user) {
+        await user.fetch({ useMasterKey: true });
+        
+        // Set ACL to allow public read and hospital write
+        const acl = new Parse.ACL();
+        acl.setPublicReadAccess(true);
+        acl.setWriteAccess(user, true);
+        bloodRequest.setACL(acl);
+      }
     }
     
     // Set initial values
-    bloodRequest.set("status", "Active");
-    bloodRequest.set("acceptedCount", 0);
-    
-    // Set ACL to allow public read and owner write
-    const acl = new Parse.ACL();
-    acl.setPublicReadAccess(true);
-    
-    // Get the user from the hospital profile
-    const user = bloodRequest.get("hospital")?.get("user");
-    if (user) {
-      acl.setWriteAccess(user, true);
+    if (!bloodRequest.get("status")) {
+      bloodRequest.set("status", "Active");
     }
-    
-    bloodRequest.setACL(acl);
+    if (!bloodRequest.get("acceptedCount")) {
+      bloodRequest.set("acceptedCount", 0);
+    }
   }
 });
 

@@ -84,15 +84,15 @@ export default function CreateBloodRequestPage() {
     }
 
     try {
-      // Call cloud function instead of direct save
-      const result = await Parse.Cloud.run("createBloodRequest", {
-        hospitalProfileId: profile?.id,
+      await createRequest({
+        hospital: profile,
         bloodType: formData.bloodType,
         unitsRequired: parseInt(formData.unitsRequired),
         urgencyLevel: formData.urgencyLevel,
         patientName: formData.patientName,
         description: formData.description,
-        requiredBy: formData.requiredBy,
+        requiredBy: new Date(formData.requiredBy),
+        status: "Active",
       });
 
       toast({
