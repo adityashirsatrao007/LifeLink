@@ -14,11 +14,12 @@ export default function DonorDashboard() {
   const router = useRouter();
   const { toast } = useToast();
   const { user, profile, checkAuth, logout } = useAuthStore();
-  const { requests, fetchRequests, respondToRequest, isLoading } = useRequestStore();
+  const { requests, myResponses, fetchRequests, fetchMyResponses, respondToRequest, isLoading } = useRequestStore();
 
   useEffect(() => {
     checkAuth();
     fetchRequests({ status: "Active" });
+    fetchMyResponses(); // Fetch donor's existing responses
   }, []);
 
   useEffect(() => {
@@ -39,7 +40,7 @@ export default function DonorDashboard() {
         title: "Request Accepted",
         description: "The hospital will be notified of your acceptance.",
       });
-      await fetchRequests({ status: "Active" });
+      await fetchMyResponses(); // Refresh to show updated status
     } catch (error: any) {
       toast({
         title: "Error",
@@ -56,7 +57,7 @@ export default function DonorDashboard() {
         title: "Request Declined",
         description: "The request has been declined.",
       });
-      await fetchRequests({ status: "Active" });
+      await fetchMyResponses(); // Refresh to show updated status
     } catch (error: any) {
       toast({
         title: "Error",
@@ -155,6 +156,10 @@ export default function DonorDashboard() {
                   .filter(req => req.get("bloodType") === bloodType)
                   .map((request) => {
                     const hospital = request.get("hospital");
+                    const myResponse = myResponses.get(request.id);
+                    const hasResponded = !!myResponse;
+                    const responseType = myResponse?.get("responseType");
+                    
                     return (
                       <div
                         key={request.id}
@@ -183,24 +188,39 @@ export default function DonorDashboard() {
                             {request.get("urgencyLevel")}
                           </Badge>
                         </div>
-                        <div className="mt-3 flex space-x-2">
-                          <Button 
-                            size="sm" 
-                            className="bg-green-600 hover:bg-green-700"
-                            onClick={() => handleAccept(request.id)}
-                            disabled={isLoading}
-                          >
-                            Accept
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => handleDecline(request.id)}
-                            disabled={isLoading}
-                          >
-                            Decline
-                          </Button>
-                        </div>
+                        
+                        {hasResponded ? (
+                          <div className="mt-3">
+                            <Badge 
+                              variant={responseType === "Accepted" ? "default" : "secondary"}
+                              className={responseType === "Accepted" ? "bg-green-600" : ""}
+                            >
+                              {responseType === "Accepted" ? "✓ Request Accepted" : "Request Declined"}
+                            </Badge>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Responded on {new Date(myResponse.get("respondedAt")).toLocaleDateString()}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="mt-3 flex space-x-2">
+                            <Button 
+                              size="sm" 
+                              className="bg-green-600 hover:bg-green-700"
+                              onClick={() => handleAccept(request.id)}
+                              disabled={isLoading}
+                            >
+                              Accept
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleDecline(request.id)}
+                              disabled={isLoading}
+                            >
+                              Decline
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

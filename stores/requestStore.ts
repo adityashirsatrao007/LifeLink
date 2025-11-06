@@ -7,6 +7,7 @@ interface RequestState {
   requests: Parse.Object[];
   selectedRequest: Parse.Object | null;
   responses: Parse.Object[];
+  myResponses: Map<string, Parse.Object>; // Map of requestId -> response
   isLoading: boolean;
   error: string | null;
   
@@ -15,6 +16,7 @@ interface RequestState {
   fetchRequestById: (requestId: string) => Promise<void>;
   createRequest: (data: any) => Promise<Parse.Object>;
   fetchResponses: (requestId: string) => Promise<void>;
+  fetchMyResponses: () => Promise<void>; // Fetch current donor's responses
   respondToRequest: (requestId: string, responseType: 'Accepted' | 'Declined') => Promise<void>;
   closeRequest: (requestId: string) => Promise<void>;
   clearError: () => void;
@@ -24,6 +26,7 @@ export const useRequestStore = create<RequestState>((set, get) => ({
   requests: [],
   selectedRequest: null,
   responses: [],
+  myResponses: new Map(),
   isLoading: false,
   error: null,
 
@@ -112,6 +115,40 @@ export const useRequestStore = create<RequestState>((set, get) => ({
     }
   },
 
+  fetchMyResponses: async () => {
+    try {
+      const currentUser = Parse.User.current();
+      if (!currentUser) return;
+
+      // Get donor profile
+      const profileQuery = new Parse.Query('DonorProfile');
+      profileQuery.equalTo('user', currentUser);
+      const donorProfile = await profileQuery.first();
+      
+      if (!donorProfile) return;
+
+      // Fetch all responses from this donor
+      const query = new Parse.Query('DonorResponse');
+      query.equalTo('donor', donorProfile);
+      query.include('bloodRequest');
+      
+      const responses = await query.find();
+      
+      // Create map of requestId -> response
+      const myResponsesMap = new Map<string, Parse.Object>();
+      responses.forEach(response => {
+        const bloodRequest = response.get('bloodRequest');
+        if (bloodRequest) {
+          myResponsesMap.set(bloodRequest.id, response);
+        }
+      });
+      
+      set({ myResponses: myResponsesMap });
+    } catch (error: any) {
+      console.error('Error fetching my responses:', error);
+    }
+  },
+
   respondToRequest: async (requestId: string, responseType: 'Accepted' | 'Declined') => {
     set({ isLoading: true, error: null });
     try {
@@ -125,15 +162,27 @@ export const useRequestStore = create<RequestState>((set, get) => ({
       
       if (!donorProfile) throw new Error('Donor profile not found');
 
+      // Check if already responded
+      const existingQuery = new Parse.Query('DonorResponse');
+      existingQuery.equalTo('donor', donorProfile);
+      const request = new Parse.Object('BloodRequest');
+      request.id = requestId;
+      existingQuery.equalTo('bloodRequest', request);
+      const existingResponse = await existingQuery.first();
+      
+      if (existingResponse) {
+        throw new Error('You have already responded to this request');
+      }
+
       // Get blood request
       const requestQuery = new Parse.Query('BloodRequest');
-      const request = await requestQuery.get(requestId);
-      const hospital = request.get('hospital');
+      const bloodRequest = await requestQuery.get(requestId);
+      const hospital = bloodRequest.get('hospital');
 
       // Create response
       const DonorResponse = Parse.Object.extend('DonorResponse');
       const response = new DonorResponse();
-      response.set('bloodRequest', request);
+      response.set('bloodRequest', bloodRequest);
       response.set('donor', donorProfile);
       response.set('hospital', hospital);
       response.set('responseType', responseType);
@@ -143,6 +192,9 @@ export const useRequestStore = create<RequestState>((set, get) => ({
       
       await response.save();
       set({ isLoading: false });
+      
+      // Refresh my responses
+      await get().fetchMyResponses();
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;
