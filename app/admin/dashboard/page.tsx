@@ -17,8 +17,11 @@ export default function AdminDashboard() {
   const { user, checkAuth, logout } = useAuthStore();
   const [pendingHospitals, setPendingHospitals] = useState<Parse.Object[]>([]);
   const [allHospitals, setAllHospitals] = useState<Parse.Object[]>([]);
+  const [allRequests, setAllRequests] = useState<Parse.Object[]>([]);
+  const [allResponses, setAllResponses] = useState<Parse.Object[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [rejectionReasons, setRejectionReasons] = useState<{ [key: string]: string }>({});
+  const [activeTab, setActiveTab] = useState<'hospitals' | 'requests' | 'responses'>('hospitals');
 
   useEffect(() => {
     checkAuth();
@@ -48,6 +51,22 @@ export default function AdminDashboard() {
       allQuery.descending("createdAt");
       const all = await allQuery.find();
       setAllHospitals(all);
+
+      // Fetch all blood requests
+      const requestsQuery = new Parse.Query("BloodRequest");
+      requestsQuery.include("hospital");
+      requestsQuery.descending("createdAt");
+      requestsQuery.limit(50);
+      const requests = await requestsQuery.find();
+      setAllRequests(requests);
+
+      // Fetch all donor responses
+      const responsesQuery = new Parse.Query("DonorResponse");
+      responsesQuery.include(["donor", "hospital", "bloodRequest"]);
+      responsesQuery.descending("respondedAt");
+      responsesQuery.limit(100);
+      const responses = await responsesQuery.find();
+      setAllResponses(responses);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -142,6 +161,43 @@ export default function AdminDashboard() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
+        {/* Tabs */}
+        <div className="flex space-x-2 mb-6 border-b">
+          <button
+            className={`px-4 py-2 font-semibold ${
+              activeTab === 'hospitals'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+            onClick={() => setActiveTab('hospitals')}
+          >
+            Hospitals ({allHospitals.length})
+          </button>
+          <button
+            className={`px-4 py-2 font-semibold ${
+              activeTab === 'requests'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+            onClick={() => setActiveTab('requests')}
+          >
+            Blood Requests ({allRequests.length})
+          </button>
+          <button
+            className={`px-4 py-2 font-semibold ${
+              activeTab === 'responses'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+            onClick={() => setActiveTab('responses')}
+          >
+            Donor Responses ({allResponses.length})
+          </button>
+        </div>
+
+        {/* Hospitals Tab */}
+        {activeTab === 'hospitals' && (
+          <>
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card>
@@ -326,6 +382,154 @@ export default function AdminDashboard() {
             )}
           </CardContent>
         </Card>
+        </>
+        )}
+
+        {/* Blood Requests Tab */}
+        {activeTab === 'requests' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>All Blood Requests</CardTitle>
+              <CardDescription>View all blood requests from all hospitals</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : allRequests.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No blood requests yet
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {allRequests.map((request) => {
+                    const hospital = request.get("hospital");
+                    return (
+                      <div
+                        key={request.id}
+                        className="p-4 border rounded-lg hover:bg-gray-50"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-semibold text-lg">
+                              {hospital?.get("hospitalName") || "Unknown Hospital"}
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                              Blood Type: <strong className="text-red-600">{request.get("bloodType")}</strong> • 
+                              Units: <strong>{request.get("unitsRequired")}</strong> • 
+                              Patient: <strong>{request.get("patientName")}</strong>
+                            </p>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {request.get("description")}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-2">
+                              Created: {new Date(request.get("createdAt")).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end space-y-2">
+                            <Badge
+                              variant={
+                                request.get("urgencyLevel") === "Critical"
+                                  ? "destructive"
+                                  : "default"
+                              }
+                            >
+                              {request.get("urgencyLevel")}
+                            </Badge>
+                            <Badge variant="outline">{request.get("status")}</Badge>
+                            <p className="text-sm text-green-600 font-semibold">
+                              {request.get("acceptedCount") || 0} accepted
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Donor Responses Tab */}
+        {activeTab === 'responses' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>All Donor Responses</CardTitle>
+              <CardDescription>View all donor responses to blood requests</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : allResponses.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No donor responses yet
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {allResponses.map((response) => {
+                    const donor = response.get("donor");
+                    const hospital = response.get("hospital");
+                    const request = response.get("bloodRequest");
+                    const responseType = response.get("responseType");
+                    
+                    return (
+                      <div
+                        key={response.id}
+                        className={`p-4 border-2 rounded-lg ${
+                          responseType === "Accepted"
+                            ? "border-green-200 bg-green-50"
+                            : "border-gray-200 bg-gray-50"
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <Badge
+                                className={
+                                  responseType === "Accepted"
+                                    ? "bg-green-600"
+                                    : "bg-gray-600"
+                                }
+                              >
+                                {responseType}
+                              </Badge>
+                              <h3 className="font-semibold">
+                                {donor?.get("fullName")}
+                              </h3>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <p className="text-gray-600">Donor Details:</p>
+                                <p><strong>Blood Type:</strong> {donor?.get("bloodType")}</p>
+                                <p><strong>Phone:</strong> {donor?.get("phoneNumber")}</p>
+                                <p><strong>Location:</strong> {donor?.get("city")}, {donor?.get("state")}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">Request Details:</p>
+                                <p><strong>Hospital:</strong> {hospital?.get("hospitalName")}</p>
+                                <p><strong>Blood Type:</strong> {request?.get("bloodType")}</p>
+                                <p><strong>Units:</strong> {request?.get("unitsRequired")}</p>
+                              </div>
+                            </div>
+                            
+                            <p className="text-xs text-gray-500 mt-2">
+                              Responded: {new Date(response.get("respondedAt")).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </main>
     </div>
   );

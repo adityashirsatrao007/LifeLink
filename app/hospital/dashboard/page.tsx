@@ -168,7 +168,8 @@ export default function HospitalDashboard() {
                 {requests.map((request) => (
                   <div
                     key={request.id}
-                    className="p-4 border rounded-lg hover:bg-gray-50 transition"
+                    className="p-4 border rounded-lg hover:bg-gray-50 transition cursor-pointer"
+                    onClick={() => router.push(`/hospital/requests/${request.id}`)}
                   >
                     <div className="flex justify-between items-start">
                       <div>
@@ -177,7 +178,7 @@ export default function HospitalDashboard() {
                         </h3>
                         <p className="text-sm text-gray-600">
                           Quantity: <strong>{request.get("unitsRequired") || request.get("quantityNeeded")} units</strong> • 
-                          Accepted: <strong>{request.get("acceptedCount") || 0}</strong>
+                          Patient: <strong>{request.get("patientName")}</strong>
                         </p>
                         <p className="text-sm text-gray-600 mt-1">
                           Created: {new Date(request.get("createdAt")).toLocaleDateString()}
@@ -195,6 +196,13 @@ export default function HospitalDashboard() {
                         </Badge>
                         <Badge variant="outline">{request.get("status")}</Badge>
                       </div>
+                    </div>
+                    <div className="mt-3 pt-3 border-t">
+                      <p className="text-sm text-gray-600">
+                        <span className="text-green-600 font-semibold">{request.get("acceptedCount") || 0} donors accepted</span>
+                        {" • "}
+                        Click to view details and contact donors
+                      </p>
                     </div>
                   </div>
                 ))}
