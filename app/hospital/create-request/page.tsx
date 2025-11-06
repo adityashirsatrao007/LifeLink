@@ -84,8 +84,7 @@ export default function CreateBloodRequestPage() {
 
     try {
       await createRequest({
-        hospital: user,
-        hospitalProfile: profile,
+        hospital: profile,  // Changed from user to profile (HospitalProfile)
         bloodType: formData.bloodType,
         unitsRequired: parseInt(formData.unitsRequired),
         urgencyLevel: formData.urgencyLevel,
