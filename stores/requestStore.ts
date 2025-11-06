@@ -67,21 +67,29 @@ export const useRequestStore = create<RequestState>((set, get) => ({
   createRequest: async (data: any) => {
     set({ isLoading: true, error: null });
     try {
-      const BloodRequest = Parse.Object.extend('BloodRequest');
-      const request = new BloodRequest();
-      
-      Object.keys(data).forEach(key => {
-        request.set(key, data[key]);
+      // Use cloud function to bypass CLP restrictions
+      const result = await Parse.Cloud.run('createBloodRequest', {
+        hospitalProfileId: data.hospital.id,
+        bloodType: data.bloodType,
+        unitsRequired: data.unitsRequired,
+        urgencyLevel: data.urgencyLevel,
+        patientName: data.patientName,
+        description: data.description,
+        requiredBy: data.requiredBy.toISOString(),
       });
       
-      await request.save();
       set({ isLoading: false });
       
       // Refresh requests list
       await get().fetchRequests();
       
+      // Return a Parse object from the result
+      const BloodRequest = Parse.Object.extend('BloodRequest');
+      const request = new BloodRequest();
+      request.id = result.objectId;
       return request;
     } catch (error: any) {
+      console.error('Error creating blood request:', error);
       set({ error: error.message, isLoading: false });
       throw error;
     }
