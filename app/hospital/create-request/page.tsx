@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Parse from "@/lib/parse";
 import { useAuthStore } from "@/stores/authStore";
 import { useRequestStore } from "@/stores/requestStore";
 import { Button } from "@/components/ui/button";
@@ -83,15 +84,15 @@ export default function CreateBloodRequestPage() {
     }
 
     try {
-      await createRequest({
-        hospital: profile,  // Changed from user to profile (HospitalProfile)
+      // Call cloud function instead of direct save
+      const result = await Parse.Cloud.run("createBloodRequest", {
+        hospitalProfileId: profile?.id,
         bloodType: formData.bloodType,
         unitsRequired: parseInt(formData.unitsRequired),
         urgencyLevel: formData.urgencyLevel,
         patientName: formData.patientName,
         description: formData.description,
-        requiredBy: new Date(formData.requiredBy),
-        status: "Active",
+        requiredBy: formData.requiredBy,
       });
 
       toast({
