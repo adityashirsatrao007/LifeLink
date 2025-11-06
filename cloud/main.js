@@ -103,32 +103,47 @@ Parse.Cloud.define("rejectHospital", async (request) => {
 // Validate hospital is approved before creating request
 Parse.Cloud.beforeSave("BloodRequest", async (request) => {
   const bloodRequest = request.object;
+  const user = request.user;
   
   if (!request.original) { // New request
     const hospital = bloodRequest.get("hospital");
     
-    if (hospital) {
-      await hospital.fetch({ useMasterKey: true });
-      const verificationStatus = hospital.get("verificationStatus");
+    if (!hospital) {
+      throw new Parse.Error(
+        Parse.Error.VALIDATION_ERROR,
+        "Hospital profile is required"
+      );
+    }
+    
+    // Fetch hospital profile with master key to check verification status
+    await hospital.fetch({ useMasterKey: true });
+    const verificationStatus = hospital.get("verificationStatus");
+    
+    if (verificationStatus !== "Approved") {
+      throw new Parse.Error(
+        Parse.Error.OPERATION_FORBIDDEN,
+        "Hospital must be approved before creating blood requests"
+      );
+    }
+    
+    // Get user from hospital profile for ACL
+    const hospitalUser = hospital.get("user");
+    if (hospitalUser) {
+      await hospitalUser.fetch({ useMasterKey: true });
       
-      if (verificationStatus !== "Approved") {
+      // Verify the current user matches the hospital user
+      if (user && user.id !== hospitalUser.id) {
         throw new Parse.Error(
           Parse.Error.OPERATION_FORBIDDEN,
-          "Hospital must be approved before creating blood requests"
+          "You can only create requests for your own hospital"
         );
       }
       
-      // Get user from hospital profile for ACL
-      const user = hospital.get("user");
-      if (user) {
-        await user.fetch({ useMasterKey: true });
-        
-        // Set ACL to allow public read and hospital write
-        const acl = new Parse.ACL();
-        acl.setPublicReadAccess(true);
-        acl.setWriteAccess(user, true);
-        bloodRequest.setACL(acl);
-      }
+      // Set ACL to allow public read and hospital write
+      const acl = new Parse.ACL();
+      acl.setPublicReadAccess(true);
+      acl.setWriteAccess(hospitalUser, true);
+      bloodRequest.setACL(acl);
     }
     
     // Set initial values
