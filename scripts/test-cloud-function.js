@@ -11,17 +11,32 @@ async function testCloudFunction() {
   console.log('🧪 Testing createBloodRequest cloud function\n');
   console.log('='.repeat(60));
   
+  const retry = async (fn, label) => {
+    const delays = [0, 1000, 2000];
+    let lastErr;
+    for (let i = 0; i < delays.length; i++) {
+      if (delays[i]) await new Promise(r => setTimeout(r, delays[i]));
+      try { return await fn(); } catch (e) {
+        lastErr = e;
+        const msg = (e && e.message) || String(e);
+        if (!/Bad Gateway|ECONNRESET|ETIMEDOUT|ENOTFOUND/i.test(msg)) break;
+        console.log(`   ⚠️  ${label} failed (attempt ${i+1}), retrying...`);
+      }
+    }
+    throw lastErr;
+  };
+  
   try {
   // Login as hospital (use known working account)
     console.log('\n📝 Step 1: Login as hospital');
-  const user = await Parse.User.logIn('hospital', 'hospital');
+  const user = await retry(() => Parse.User.logIn('hospital', 'hospital'), 'Login');
     console.log(`   ✅ Logged in as: ${user.get('username')}`);
     
     // Get hospital profile
     console.log('\n📝 Step 2: Get hospital profile');
     const profileQuery = new Parse.Query('HospitalProfile');
     profileQuery.equalTo('user', user);
-    const hospital = await profileQuery.first({ sessionToken: user.getSessionToken() });
+  const hospital = await retry(() => profileQuery.first({ sessionToken: user.getSessionToken() }), 'Fetch hospital profile');
     
     if (!hospital) {
       throw new Error('Hospital profile not found!');
@@ -33,7 +48,7 @@ async function testCloudFunction() {
     
     // Call cloud function to create blood request
     console.log('\n📝 Step 3: Create blood request via cloud function');
-    const result = await Parse.Cloud.run('createBloodRequest', {
+    const result = await retry(() => Parse.Cloud.run('createBloodRequest', {
       hospitalProfileId: hospital.id,
       bloodType: 'A+',
       unitsRequired: 2,
@@ -41,7 +56,7 @@ async function testCloudFunction() {
       patientName: 'Test Patient via Cloud Function',
       description: 'Testing cloud function to bypass CLP restrictions',
       requiredBy: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    });
+    }), 'Run createBloodRequest');
     
     console.log(`   ✅ Blood request created!`);
     console.log(`   Request ID: ${result.objectId}`);
@@ -52,19 +67,19 @@ async function testCloudFunction() {
     // Verify we can read it
     console.log('\n📝 Step 4: Verify request is readable');
     const requestQuery = new Parse.Query('BloodRequest');
-    const savedRequest = await requestQuery.get(result.objectId);
+  const savedRequest = await retry(() => requestQuery.get(result.objectId), 'Verify request');
     console.log(`   ✅ Request found: ${savedRequest.get('patientName')}`);
     console.log(`   ACL public read: ${savedRequest.getACL().getPublicReadAccess()}`);
     
     // Test with donor
     console.log('\n📝 Step 5: Test donor can see request');
     await Parse.User.logOut();
-  await Parse.User.logIn('adityashirsatrao007', 'Aditya@001');
+  await retry(() => Parse.User.logIn('adityashirsatrao007', 'Aditya@001'), 'Donor login');
     
     const donorQuery = new Parse.Query('BloodRequest');
     donorQuery.equalTo('bloodType', 'A+');
     donorQuery.equalTo('status', 'Active');
-    const requests = await donorQuery.find();
+  const requests = await retry(() => donorQuery.find(), 'Donor query');
     
     console.log(`   ✅ Donor can see ${requests.length} A+ requests`);
     

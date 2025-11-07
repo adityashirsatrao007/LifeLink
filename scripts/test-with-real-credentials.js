@@ -7,107 +7,125 @@ Parse.initialize(
 );
 Parse.serverURL = 'https://parseapi.back4app.com';
 
+// Simple retry helper for transient network/502 errors
+async function retry(fn, label) {
+  const delays = [0, 1000, 2000];
+  let lastErr;
+  for (let i = 0; i < delays.length; i++) {
+    if (delays[i]) await new Promise((r) => setTimeout(r, delays[i]));
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      const msg = (e && e.message) || String(e);
+      if (!/Bad Gateway|ECONNRESET|ETIMEDOUT|ENOTFOUND/i.test(msg)) break;
+      console.log(`   ⚠️  ${label} failed (attempt ${i + 1}), retrying...`);
+    }
+  }
+  throw lastErr;
+}
+
 async function testFullFlow() {
   console.log('🧪 TESTING LIFELINK APP WITH ACTUAL CREDENTIALS\n');
   console.log('='.repeat(70));
-  
+
   let hospitalUser, hospitalProfile, bloodRequest;
   let donorUser, donorProfile;
-  
+
   try {
     // ==================== TEST 1: HOSPITAL LOGIN ====================
     console.log('\n📝 TEST 1: Hospital Login');
     console.log('-'.repeat(70));
-    
-    hospitalUser = await Parse.User.logIn('hospital', 'hospital');
+
+    hospitalUser = await retry(() => Parse.User.logIn('hospital', 'hospital'), 'Hospital login');
     console.log(`✅ Logged in as: ${hospitalUser.get('username')}`);
     console.log(`   User Type: ${hospitalUser.get('userType')}`);
-    
+
     // Get hospital profile
     const hospitalQuery = new Parse.Query('HospitalProfile');
     hospitalQuery.equalTo('user', hospitalUser);
-    hospitalProfile = await hospitalQuery.first({ sessionToken: hospitalUser.getSessionToken() });
-    
+    hospitalProfile = await retry(
+      () => hospitalQuery.first({ sessionToken: hospitalUser.getSessionToken() }),
+      'Fetch hospital profile'
+    );
+
     if (!hospitalProfile) {
-      console.log('❌ Hospital profile not found!');
-      console.log('   Creating hospital profile...');
-      // If no profile exists, this would have been created during registration
-      // For testing, we'll just note it
       throw new Error('Hospital profile missing - user may need to complete registration');
     }
-    
+
     console.log(`✅ Hospital Profile Found`);
     console.log(`   Hospital Name: ${hospitalProfile.get('hospitalName') || 'Not set'}`);
     console.log(`   Status: ${hospitalProfile.get('verificationStatus')}`);
     console.log(`   License: ${hospitalProfile.get('licenseNumber') || 'Not set'}`);
-    
-    // Check if approved
+
+    // Ensure approved for the test
     const isApproved = hospitalProfile.get('verificationStatus') === 'Approved';
     if (!isApproved) {
-      console.log('\n⚠️  Hospital is NOT approved yet');
-      console.log('   Auto-approving for testing...');
-      
+      console.log('\n⚠️  Hospital is NOT approved yet — auto-approving for the test...');
       hospitalProfile.set('verificationStatus', 'Approved');
       hospitalProfile.set('approvedAt', new Date());
       await hospitalProfile.save(null, { useMasterKey: true });
-      
       console.log('✅ Hospital auto-approved!');
     }
-    
+
     await Parse.User.logOut();
-    
+
     // ==================== TEST 2: DONOR LOGIN ====================
     console.log('\n📝 TEST 2: Donor Login');
     console.log('-'.repeat(70));
-    
-    donorUser = await Parse.User.logIn('adityashirsatrao007', 'Aditya@001');
+
+    donorUser = await retry(() => Parse.User.logIn('adityashirsatrao007', 'Aditya@001'), 'Donor login');
     console.log(`✅ Logged in as: ${donorUser.get('username')}`);
     console.log(`   User Type: ${donorUser.get('userType')}`);
-    
+
     // Get donor profile
     const donorQuery = new Parse.Query('DonorProfile');
     donorQuery.equalTo('user', donorUser);
-    donorProfile = await donorQuery.first({ sessionToken: donorUser.getSessionToken() });
-    
+    donorProfile = await retry(
+      () => donorQuery.first({ sessionToken: donorUser.getSessionToken() }),
+      'Fetch donor profile'
+    );
+
     if (!donorProfile) {
-      console.log('❌ Donor profile not found!');
       throw new Error('Donor profile missing - user may need to complete registration');
     }
-    
+
     console.log(`✅ Donor Profile Found`);
     console.log(`   Full Name: ${donorProfile.get('fullName') || 'Not set'}`);
     console.log(`   Blood Type: ${donorProfile.get('bloodType')}`);
     console.log(`   Phone: ${donorProfile.get('phoneNumber') || 'Not set'}`);
     console.log(`   Location: ${donorProfile.get('city')}, ${donorProfile.get('state')}`);
-    
+
     await Parse.User.logOut();
-    
+
     // ==================== TEST 3: CREATE BLOOD REQUEST ====================
     console.log('\n📝 TEST 3: Create Blood Request (via Cloud Function)');
     console.log('-'.repeat(70));
-    
+
     // Login as hospital again
-    await Parse.User.logIn('hospital', 'hospital');
-    
+    await retry(() => Parse.User.logIn('hospital', 'hospital'), 'Hospital login');
+
     try {
-      const result = await Parse.Cloud.run('createBloodRequest', {
-        hospitalProfileId: hospitalProfile.id,
-        bloodType: donorProfile.get('bloodType'), // Match donor's blood type
-        unitsRequired: 2,
-        urgencyLevel: 'High',
-        patientName: 'Test Patient for Integration Test',
-        description: 'Testing full flow with actual credentials',
-        requiredBy: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-      });
-      
+      const result = await retry(
+        () =>
+          Parse.Cloud.run('createBloodRequest', {
+            hospitalProfileId: hospitalProfile.id,
+            bloodType: donorProfile.get('bloodType'),
+            unitsRequired: 2,
+            urgencyLevel: 'High',
+            patientName: 'Test Patient for Integration Test',
+            description: 'Testing full flow with actual credentials',
+            requiredBy: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          }),
+        'Run createBloodRequest'
+      );
+
       console.log(`✅ Blood Request Created!`);
       console.log(`   Request ID: ${result.objectId}`);
       console.log(`   Blood Type: ${result.bloodType}`);
-      console.log(`   Status: ${result.status}`);
-      
+
       bloodRequest = new Parse.Object('BloodRequest');
       bloodRequest.id = result.objectId;
-      
     } catch (error) {
       if (error.message.includes('Invalid function')) {
         console.log('❌ Cloud function not deployed yet!');
@@ -122,23 +140,23 @@ async function testFullFlow() {
         throw error;
       }
     }
-    
+
     await Parse.User.logOut();
-    
+
     // ==================== TEST 4: DONOR VIEWS REQUEST ====================
     console.log('\n📝 TEST 4: Donor Views Matching Requests');
     console.log('-'.repeat(70));
-    
-    await Parse.User.logIn('adityashirsatrao007', 'Aditya@001');
-    
+
+    await retry(() => Parse.User.logIn('adityashirsatrao007', 'Aditya@001'), 'Donor login');
+
     const requestQuery = new Parse.Query('BloodRequest');
     requestQuery.equalTo('bloodType', donorProfile.get('bloodType'));
     requestQuery.equalTo('status', 'Active');
     requestQuery.include('hospital');
-    const matchingRequests = await requestQuery.find();
-    
+    const matchingRequests = await retry(() => requestQuery.find(), 'Find matching requests');
+
     console.log(`✅ Found ${matchingRequests.length} matching requests for ${donorProfile.get('bloodType')}`);
-    
+
     if (matchingRequests.length > 0) {
       const req = matchingRequests[0];
       const hosp = req.get('hospital');
@@ -148,11 +166,11 @@ async function testFullFlow() {
       console.log(`     Units: ${req.get('unitsRequired')}`);
       console.log(`     Urgency: ${req.get('urgencyLevel')}`);
     }
-    
+
     // ==================== TEST 5: DONOR ACCEPTS REQUEST ====================
     console.log('\n📝 TEST 5: Donor Accepts Blood Request');
     console.log('-'.repeat(70));
-    
+
     if (!bloodRequest) {
       console.log('⚠️  Skipping - no blood request created in this session');
     } else {
@@ -160,16 +178,19 @@ async function testFullFlow() {
       const existingQuery = new Parse.Query('DonorResponse');
       existingQuery.equalTo('donor', donorProfile);
       existingQuery.equalTo('bloodRequest', bloodRequest);
-      const existing = await existingQuery.first();
-      
+      const existing = await retry(() => existingQuery.first(), 'Check existing response');
+
       if (existing) {
         console.log(`⚠️  Already responded with: ${existing.get('responseType')}`);
         console.log(`   Responded on: ${existing.get('respondedAt').toLocaleString()}`);
       } else {
         // Fetch full blood request
-        const fullRequest = await new Parse.Query('BloodRequest').get(bloodRequest.id);
+        const fullRequest = await retry(
+          () => new Parse.Query('BloodRequest').get(bloodRequest.id),
+          'Fetch blood request'
+        );
         const hospital = fullRequest.get('hospital');
-        
+
         // Create response
         const DonorResponse = Parse.Object.extend('DonorResponse');
         const response = new DonorResponse();
@@ -180,24 +201,23 @@ async function testFullFlow() {
         response.set('respondedAt', new Date());
         response.set('isConfirmed', false);
         response.set('donationCompleted', false);
-        
-        await response.save();
-        
+
+        await retry(() => response.save(), 'Save donor response');
+
         console.log(`✅ Response Created!`);
         console.log(`   Response ID: ${response.id}`);
         console.log(`   Type: Accepted`);
-        console.log(`   Donor: ${donorProfile.get('fullName')}`);
       }
     }
-    
+
     await Parse.User.logOut();
-    
+
     // ==================== TEST 6: HOSPITAL VIEWS RESPONSES ====================
     console.log('\n📝 TEST 6: Hospital Views Donor Responses');
     console.log('-'.repeat(70));
-    
-    await Parse.User.logIn('hospital', 'hospital');
-    
+
+    await retry(() => Parse.User.logIn('hospital', 'hospital'), 'Hospital login');
+
     if (!bloodRequest) {
       console.log('⚠️  Skipping - no blood request to check');
     } else {
@@ -205,16 +225,16 @@ async function testFullFlow() {
       responseQuery.equalTo('bloodRequest', bloodRequest);
       responseQuery.include('donor');
       responseQuery.descending('respondedAt');
-      const responses = await responseQuery.find();
-      
+      const responses = await retry(() => responseQuery.find(), 'Fetch responses');
+
       console.log(`✅ Found ${responses.length} responses`);
-      
-      const accepted = responses.filter(r => r.get('responseType') === 'Accepted');
-      const declined = responses.filter(r => r.get('responseType') === 'Declined');
-      
+
+      const accepted = responses.filter((r) => r.get('responseType') === 'Accepted');
+      const declined = responses.filter((r) => r.get('responseType') === 'Declined');
+
       console.log(`   Accepted: ${accepted.length}`);
       console.log(`   Declined: ${declined.length}`);
-      
+
       if (accepted.length > 0) {
         console.log('\n   📋 Accepted Donors (Contact Details):');
         accepted.forEach((res, idx) => {
@@ -228,9 +248,9 @@ async function testFullFlow() {
         });
       }
     }
-    
+
     await Parse.User.logOut();
-    
+
     // ==================== SUMMARY ====================
     console.log('\n' + '='.repeat(70));
     console.log('✅ ALL TESTS PASSED!');
@@ -244,7 +264,7 @@ async function testFullFlow() {
     console.log('   ✅ Donor can view matching requests');
     console.log('   ✅ Donor can accept requests');
     console.log('   ✅ Hospital can see donor contact details');
-    
+
     console.log('\n🎉 READY FOR PRODUCTION!');
     console.log('\n📝 Next Steps:');
     console.log('   1. Open http://localhost:3000');
@@ -255,7 +275,6 @@ async function testFullFlow() {
     console.log('   6. Logout, login as hospital again');
     console.log('   7. Click on the request to see donor contact details!');
     console.log('');
-    
   } catch (error) {
     console.error('\n❌ TEST FAILED:', error.message);
     console.error('\nFull error:', error);

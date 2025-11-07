@@ -28,44 +28,56 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
 
   login: async (username: string, password: string) => {
-    // Helper: timeout wrapper to avoid indefinite loading on network stalls
-    const withTimeout = <T,>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
-      return new Promise<T>((resolve, reject) => {
-        const id = setTimeout(() => reject(new Error(timeoutMessage)), ms);
-        promise
-          .then((val) => {
-            clearTimeout(id);
-            resolve(val);
-          })
-          .catch((err) => {
-            clearTimeout(id);
-            reject(err);
-          });
-      });
+    // Helper: timeout for fetch
+    const fetchWithTimeout = async (input: RequestInfo, init: RequestInit & { timeoutMs?: number } = {}) => {
+      const { timeoutMs = 15000, ...rest } = init;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        // @ts-ignore
+        return await fetch(input as any, { ...rest, signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
     };
 
     set({ isLoading: true, error: null });
     try {
-      // Attempt login with a 15s timeout to prevent UI from getting stuck
-      console.debug('[Auth] Attempting login for', username);
-      const user = await withTimeout(
-        Parse.User.logIn(username, password),
-        15000,
-        'Login timed out. Please check your internet connection and try again.'
-      );
-      const userType = user.get('userType') as UserType;
+      console.debug('[Auth] Attempting login via API for', username);
+      // Try server-side API (adds retries and better errors)
+      const res = await fetchWithTimeout('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+        timeoutMs: 15000,
+      });
+
+      if (!res.ok) {
+        // Fallback to direct SDK if API route failed (e.g., dev server not running this route)
+        console.warn('[Auth] API login failed, falling back to direct SDK login');
+        const user = await Parse.User.logIn(username, password);
+        const userType = user.get('userType') as UserType;
+        set({ user, userType });
+        await get().fetchProfile();
+        return;
+      }
+
+      const data = await res.json();
+      if (!data?.ok || !data?.sessionToken) {
+        throw new Error(data?.error || 'Login failed');
+      }
+
+      // Adopt the server session on the client
+      const user = await Parse.User.become(data.sessionToken);
+      const userType = (data.userType as UserType) || (user.get('userType') as UserType);
       set({ user, userType });
-
-      // Fetch profile after login (non-blocking for UI responsiveness)
       await get().fetchProfile();
-
       console.debug('[Auth] Login successful for', username, 'type:', userType);
     } catch (error: any) {
       console.error('[Auth] Login failed:', error);
       set({ error: error.message });
       throw error;
     } finally {
-      // Always clear loading, even on timeout or unexpected errors
       set({ isLoading: false });
     }
   },
