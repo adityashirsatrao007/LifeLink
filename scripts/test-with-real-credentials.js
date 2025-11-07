@@ -3,14 +3,13 @@ const Parse = require('parse/node');
 
 Parse.initialize(
   'JatLLoWEzO3UX0SqIgsojzf7COmzmPDJ9DrtEY6g',
-  'TpxQPT1ogHyaaY79TNujFEbC8XAQKVWBAxeBaLJI',
-  'n0n6Q8XqTOIXHzN1KPdU0G70kVSAaCCZMt30BZq1'
+  'TpxQPT1ogHyaaY79TNujFEbC8XAQKVWBAxeBaLJI'
 );
 Parse.serverURL = 'https://parseapi.back4app.com';
 
 async function testFullFlow() {
   console.log('🧪 TESTING LIFELINK APP WITH ACTUAL CREDENTIALS\n');
-  console.log('=' .repeat(70));
+  console.log('='.repeat(70));
   
   let hospitalUser, hospitalProfile, bloodRequest;
   let donorUser, donorProfile;

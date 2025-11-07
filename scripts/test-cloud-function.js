@@ -3,19 +3,18 @@ const Parse = require('parse/node');
 
 Parse.initialize(
   'JatLLoWEzO3UX0SqIgsojzf7COmzmPDJ9DrtEY6g',
-  'TpxQPT1ogHyaaY79TNujFEbC8XAQKVWBAxeBaLJI',
-  'n0n6Q8XqTOIXHzN1KPdU0G70kVSAaCCZMt30BZq1'
+  'TpxQPT1ogHyaaY79TNujFEbC8XAQKVWBAxeBaLJI'
 );
 Parse.serverURL = 'https://parseapi.back4app.com';
 
 async function testCloudFunction() {
   console.log('🧪 Testing createBloodRequest cloud function\n');
-  console.log('=' .repeat(60));
+  console.log('='.repeat(60));
   
   try {
-    // Login as hospital
+  // Login as hospital (use known working account)
     console.log('\n📝 Step 1: Login as hospital');
-    const user = await Parse.User.logIn('apollo_mumbai', 'hospital123');
+  const user = await Parse.User.logIn('hospital', 'hospital');
     console.log(`   ✅ Logged in as: ${user.get('username')}`);
     
     // Get hospital profile
@@ -48,7 +47,7 @@ async function testCloudFunction() {
     console.log(`   Request ID: ${result.objectId}`);
     console.log(`   Blood Type: ${result.bloodType}`);
     console.log(`   Status: ${result.status}`);
-    console.log(`   Hospital auto-approved: ${hospital.get('verificationStatus') === 'Pending' ? 'Yes' : 'No'}`);
+  console.log(`   Hospital status: ${hospital.get('verificationStatus')}`);
     
     // Verify we can read it
     console.log('\n📝 Step 4: Verify request is readable');
@@ -60,7 +59,7 @@ async function testCloudFunction() {
     // Test with donor
     console.log('\n📝 Step 5: Test donor can see request');
     await Parse.User.logOut();
-    await Parse.User.logIn('rahul_sharma', 'password123');
+  await Parse.User.logIn('adityashirsatrao007', 'Aditya@001');
     
     const donorQuery = new Parse.Query('BloodRequest');
     donorQuery.equalTo('bloodType', 'A+');
