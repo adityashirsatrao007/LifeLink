@@ -28,17 +28,45 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
 
   login: async (username: string, password: string) => {
+    // Helper: timeout wrapper to avoid indefinite loading on network stalls
+    const withTimeout = <T,>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
+      return new Promise<T>((resolve, reject) => {
+        const id = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+        promise
+          .then((val) => {
+            clearTimeout(id);
+            resolve(val);
+          })
+          .catch((err) => {
+            clearTimeout(id);
+            reject(err);
+          });
+      });
+    };
+
     set({ isLoading: true, error: null });
     try {
-      const user = await Parse.User.logIn(username, password);
+      // Attempt login with a 15s timeout to prevent UI from getting stuck
+      console.debug('[Auth] Attempting login for', username);
+      const user = await withTimeout(
+        Parse.User.logIn(username, password),
+        15000,
+        'Login timed out. Please check your internet connection and try again.'
+      );
       const userType = user.get('userType') as UserType;
-      set({ user, userType, isLoading: false });
-      
-      // Fetch profile after login
+      set({ user, userType });
+
+      // Fetch profile after login (non-blocking for UI responsiveness)
       await get().fetchProfile();
+
+      console.debug('[Auth] Login successful for', username, 'type:', userType);
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      console.error('[Auth] Login failed:', error);
+      set({ error: error.message });
       throw error;
+    } finally {
+      // Always clear loading, even on timeout or unexpected errors
+      set({ isLoading: false });
     }
   },
 
@@ -50,16 +78,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user.set('email', email);
       user.set('password', password);
       user.set('userType', userType);
-      
+
       await user.signUp();
-      set({ user, userType, isLoading: false });
-      
+      set({ user, userType });
+
       // Wait a moment for cloud code to create profile
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       await get().fetchProfile();
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      set({ error: error.message });
       throw error;
+    } finally {
+      set({ isLoading: false });
     }
   },
 
