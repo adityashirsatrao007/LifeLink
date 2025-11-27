@@ -1,7 +1,7 @@
 // Test the Next.js server-side login API using real credentials
 // Requires the dev server to be running on http://localhost:3000
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3001';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
